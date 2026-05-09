@@ -30,25 +30,35 @@ jobs:
       - name: 🔧 Instalar .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - name: 📦 Restaurar paquetes
         run: dotnet restore PosSystem.Client/PosSystem.Client.csproj
 
-      # Parchear Program.cs para que SQLite falle de forma silenciosa en el navegador.
-      # En GitHub Pages (online) se usa la API, no SQLite local.
-      - name: 🩹 Hacer SQLite tolerante a fallos para producción web
+      # SQLite NO funciona en GitHub Pages (requiere código nativo WASM).
+      # Para la versión online reemplazamos SQLite con InMemory de EF Core,
+      # que funciona 100% en el navegador. Los datos se guardan via API.
+      - name: 🔄 Reemplazar SQLite con InMemory para producción web
         run: |
-          PROGRAM_FILE="PosSystem.Client/Program.cs"
-          
-          # Envolver EnsureCreatedAsync en try-catch
-          sed -i 's/await db\.Database\.EnsureCreatedAsync();/try { await db.Database.EnsureCreatedAsync(); } catch (Exception ex) { Console.WriteLine("SQLite no disponible en este entorno: " + ex.Message); }/g' "$PROGRAM_FILE"
-          
-          # Envolver SaveChangesAsync del seed en try-catch
-          sed -i 's/await db\.SaveChangesAsync();/try { await db.SaveChangesAsync(); } catch { }/g' "$PROGRAM_FILE"
-          
-          echo "✅ Program.cs parcheado para tolerancia a fallos"
-          cat "$PROGRAM_FILE"
+          echo "→ Agregando paquete InMemory..."
+          dotnet add PosSystem.Client/PosSystem.Client.csproj package Microsoft.EntityFrameworkCore.InMemory
+
+          echo "→ Parcheando Program.cs..."
+          sed -i \
+            's/options\.UseSqlite("Data Source=localpos\.db")/options.UseInMemoryDatabase("PosLocalDb")/g' \
+            PosSystem.Client/Program.cs
+
+          echo "→ Parcheando LocalDbContext.cs..."
+          sed -i \
+            's/optionsBuilder\.UseSqlite("Data Source=localpos\.db")/optionsBuilder.UseInMemoryDatabase("PosLocalDb")/g' \
+            PosSystem.Client/Data/LocalDbContext.cs
+
+          echo "→ Cambiando using de SQLite a InMemory en Program.cs..."
+          sed -i \
+            's/using Microsoft\.EntityFrameworkCore;/using Microsoft.EntityFrameworkCore;\nusing Microsoft.EntityFrameworkCore.InMemory;/g' \
+            PosSystem.Client/Program.cs
+
+          echo "✅ Parche aplicado correctamente"
 
       - name: 🏗️ Publicar Blazor WebAssembly
         run: >
