@@ -35,8 +35,27 @@ jobs:
       - name: 📦 Restaurar paquetes
         run: dotnet restore PosSystem.Client/PosSystem.Client.csproj
 
+      # Parchear Program.cs para que SQLite falle de forma silenciosa en el navegador.
+      # En GitHub Pages (online) se usa la API, no SQLite local.
+      - name: 🩹 Hacer SQLite tolerante a fallos para producción web
+        run: |
+          PROGRAM_FILE="PosSystem.Client/Program.cs"
+          
+          # Envolver EnsureCreatedAsync en try-catch
+          sed -i 's/await db\.Database\.EnsureCreatedAsync();/try { await db.Database.EnsureCreatedAsync(); } catch (Exception ex) { Console.WriteLine("SQLite no disponible en este entorno: " + ex.Message); }/g' "$PROGRAM_FILE"
+          
+          # Envolver SaveChangesAsync del seed en try-catch
+          sed -i 's/await db\.SaveChangesAsync();/try { await db.SaveChangesAsync(); } catch { }/g' "$PROGRAM_FILE"
+          
+          echo "✅ Program.cs parcheado para tolerancia a fallos"
+          cat "$PROGRAM_FILE"
+
       - name: 🏗️ Publicar Blazor WebAssembly
-        run: dotnet publish PosSystem.Client/PosSystem.Client.csproj -c Release -o release --nologo
+        run: >
+          dotnet publish PosSystem.Client/PosSystem.Client.csproj
+          -c Release
+          -o release
+          --nologo
 
       - name: 🔗 Corregir base href para GitHub Pages
         run: sed -i 's|<base href="/" />|<base href="/fruteria-martin/" />|g' release/wwwroot/index.html
