@@ -65,7 +65,12 @@ jobs:
             's/optionsBuilder\.UseSqlite("Data Source=localpos\.db")/optionsBuilder.UseInMemoryDatabase("PosLocalDb")/g' \
             PosSystem.Client/Data/LocalDbContext.cs
 
-          echo "✅ SQLite reemplazado con InMemory"
+          # Corregir contraseña del seed: el código dice "admin1234" pero la correcta es "admin123"
+          sed -i \
+            's/BCrypt\.Net\.BCrypt\.HashPassword("admin1234")/BCrypt.Net.BCrypt.HashPassword("admin123")/g' \
+            PosSystem.Client/Program.cs
+
+          echo "✅ SQLite reemplazado con InMemory y contraseña del seed corregida"
 
       - name: 🏗️ Publicar Blazor WebAssembly
         run: >
