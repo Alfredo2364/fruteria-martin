@@ -35,30 +35,37 @@ jobs:
       - name: 📦 Restaurar paquetes
         run: dotnet restore PosSystem.Client/PosSystem.Client.csproj
 
-      # SQLite NO funciona en GitHub Pages (requiere código nativo WASM).
-      # Para la versión online reemplazamos SQLite con InMemory de EF Core,
-      # que funciona 100% en el navegador. Los datos se guardan via API.
+      # PASO CRÍTICO: Parchear ANTES del publish para que los hashes SRI
+      # del service worker se generen con la ruta correcta desde el inicio.
+      - name: 🔗 Establecer base href correcto ANTES del build
+        run: |
+          sed -i 's|<base href="/" />|<base href="/fruteria-martin/" />|g' \
+            PosSystem.Client/wwwroot/index.html
+          echo "✅ base href actualizado a /fruteria-martin/"
+
+      # Deshabilitar el Service Worker en GitHub Pages.
+      # El SW causa conflictos de SRI cuando el base href cambia.
+      - name: 🚫 Deshabilitar Service Worker para GitHub Pages
+        run: |
+          sed -i "s|<script>navigator\.serviceWorker\.register('service-worker\.js');</script>||g" \
+            PosSystem.Client/wwwroot/index.html
+          echo "✅ Service Worker deshabilitado"
+
+      # SQLite NO funciona en el navegador sin compilación nativa WASM.
+      # Reemplazamos con InMemory para que la app funcione online.
       - name: 🔄 Reemplazar SQLite con InMemory para producción web
         run: |
-          echo "→ Agregando paquete InMemory..."
           dotnet add PosSystem.Client/PosSystem.Client.csproj package Microsoft.EntityFrameworkCore.InMemory
 
-          echo "→ Parcheando Program.cs..."
           sed -i \
             's/options\.UseSqlite("Data Source=localpos\.db")/options.UseInMemoryDatabase("PosLocalDb")/g' \
             PosSystem.Client/Program.cs
 
-          echo "→ Parcheando LocalDbContext.cs..."
           sed -i \
             's/optionsBuilder\.UseSqlite("Data Source=localpos\.db")/optionsBuilder.UseInMemoryDatabase("PosLocalDb")/g' \
             PosSystem.Client/Data/LocalDbContext.cs
 
-          echo "→ Cambiando using de SQLite a InMemory en Program.cs..."
-          sed -i \
-            's/using Microsoft\.EntityFrameworkCore;/using Microsoft.EntityFrameworkCore;\nusing Microsoft.EntityFrameworkCore.InMemory;/g' \
-            PosSystem.Client/Program.cs
-
-          echo "✅ Parche aplicado correctamente"
+          echo "✅ SQLite reemplazado con InMemory"
 
       - name: 🏗️ Publicar Blazor WebAssembly
         run: >
@@ -66,9 +73,6 @@ jobs:
           -c Release
           -o release
           --nologo
-
-      - name: 🔗 Corregir base href para GitHub Pages
-        run: sed -i 's|<base href="/" />|<base href="/fruteria-martin/" />|g' release/wwwroot/index.html
 
       - name: 📄 Crear 404.html para rutas SPA
         run: cp release/wwwroot/index.html release/wwwroot/404.html
