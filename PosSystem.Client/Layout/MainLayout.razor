@@ -1,0 +1,146 @@
+@inherits LayoutComponentBase
+@using PosSystem.Shared.Models
+@using PosSystem.Client.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LocalDbContext> DbFactory
+
+@if (!IsLoggedIn)
+{
+    <!-- LOGIN SCREEN -->
+    <div class="d-flex align-items-center justify-content-center vh-100"
+         style="background: linear-gradient(135deg, #1a472a, #2d7a45);">
+
+        <div class="card shadow-lg border-0" style="width: 380px; border-radius: 16px; overflow: hidden;">
+
+            <!-- Card Header -->
+            <div class="text-center py-4 px-4" style="background: linear-gradient(135deg, #1a6f3c, #27ae60);">
+                <div style="font-size: 3.5rem;">🍎</div>
+                <h3 class="text-white fw-bold mb-0">Frutería Martín</h3>
+                <p class="text-white-50 mb-0" style="font-size: 0.85rem;">Sistema de Punto de Venta</p>
+            </div>
+
+            <!-- Card Body -->
+            <div class="card-body p-4">
+                <h5 class="text-center mb-4 text-muted">Iniciar Sesión</h5>
+
+                @if (loginFailed)
+                {
+                    <div class="alert alert-danger py-2 px-3 mb-3 text-center" style="font-size: 0.9rem; border-radius: 10px;">
+                        ❌ Usuario o contraseña incorrectos
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold text-muted">
+                        <span>👤</span> Nombre de usuario
+                    </label>
+                    <input type="text" class="form-control form-control-lg" placeholder="Administrador"
+                           @bind="username" @onkeydown="OnKeyDown" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold text-muted">
+                        <span>🔒</span> Contraseña
+                    </label>
+                    <input type="password" class="form-control form-control-lg" placeholder="••••••••"
+                           @bind="password" @onkeydown="OnKeyDown" />
+                </div>
+
+                <button class="btn btn-success w-100 py-2 fw-bold fs-5"
+                        @onclick="Login"
+                        disabled="@isLoggingIn"
+                        style="border-radius: 10px;">
+                    @if (isLoggingIn)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>Verificando...</span>
+                    }
+                    else
+                    {
+                        <span>Entrar al Sistema →</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Card Footer -->
+            <div class="card-footer text-center text-muted py-2" style="font-size: 0.8rem; background: #f8f9fa;">
+                Frutería Martín © @DateTime.Now.Year — Solo personal autorizado
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu />
+        </div>
+
+        <main>
+            <div class="top-row px-4 d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-success">
+                    <span>🛡️</span> @loggedInEmployee?.Name
+                    <span class="badge bg-secondary ms-1" style="font-size: 0.75rem;">@loggedInEmployee?.Role</span>
+                </span>
+                <button class="btn btn-sm btn-outline-danger" @onclick="Logout">
+                    🚪 Cerrar Sesión
+                </button>
+            </div>
+
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+}
+
+@code {
+    private bool IsLoggedIn = false;
+    private bool loginFailed = false;
+    private bool isLoggingIn = false;
+    private string username = "";
+    private string password = "";
+    private Employee? loggedInEmployee;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Login();
+    }
+
+    private async Task Login()
+    {
+        loginFailed = false;
+        isLoggingIn = true;
+
+        using var db = await DbFactory.CreateDbContextAsync();
+
+        // Find employee by name (case-insensitive)
+        var employee = await db.Employees
+            .Where(e => e.IsActive && e.Name.ToLower() == username.ToLower().Trim())
+            .FirstOrDefaultAsync();
+
+        if (employee != null && !string.IsNullOrEmpty(employee.PasswordHash)
+            && BCrypt.Net.BCrypt.Verify(password, employee.PasswordHash))
+        {
+            loggedInEmployee = employee;
+            IsLoggedIn = true;
+        }
+        else
+        {
+            loginFailed = true;
+        }
+
+        password = "";
+        isLoggingIn = false;
+    }
+
+    private void Logout()
+    {
+        IsLoggedIn = false;
+        loggedInEmployee = null;
+        username = "";
+        password = "";
+        loginFailed = false;
+    }
+}

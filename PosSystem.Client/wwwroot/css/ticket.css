@@ -1,0 +1,144 @@
+/* ==========================================
+   TICKET DE IMPRESORA TÉRMICA - FRUTERÍA MARTÍN
+   Compatible con rollos de 58mm y 80mm
+   ========================================== */
+
+/* En pantalla: Ocultar el ticket */
+.thermal-ticket-wrapper {
+    display: none;
+}
+
+/* En impresión: Ocultar TODO excepto el ticket */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .thermal-ticket-wrapper,
+    .thermal-ticket-wrapper * {
+        visibility: visible;
+    }
+
+    .thermal-ticket-wrapper {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+    }
+
+    @page {
+        size: 72mm auto; /* 80mm roll = ~72mm printable */
+        margin: 2mm;
+    }
+
+    /* TICKET CONTAINER */
+    .ticket {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 11px;
+        color: #000 !important;
+        background: #fff !important;
+        width: 68mm;
+        max-width: 68mm;
+        padding: 2mm;
+        margin: 0 auto;
+        word-break: break-word;
+    }
+
+    .ticket-header {
+        text-align: center;
+        border-bottom: 1px dashed #000;
+        padding-bottom: 4px;
+        margin-bottom: 6px;
+    }
+
+    .ticket-header h2 {
+        font-size: 15px;
+        font-weight: bold;
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .ticket-header p {
+        margin: 2px 0;
+        font-size: 10px;
+    }
+
+    .ticket-info {
+        margin-bottom: 6px;
+        font-size: 10px;
+    }
+
+    .ticket-info p {
+        margin: 1px 0;
+    }
+
+    .ticket-items-header {
+        display: flex;
+        justify-content: space-between;
+        border-top: 1px dashed #000;
+        border-bottom: 1px dashed #000;
+        padding: 3px 0;
+        font-weight: bold;
+        font-size: 10px;
+    }
+
+    .ticket-item {
+        padding: 2px 0;
+        border-bottom: 1px dotted #ccc;
+    }
+
+    .ticket-item-name {
+        font-weight: bold;
+        font-size: 11px;
+    }
+
+    .ticket-item-detail {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: #333;
+    }
+
+    .ticket-totals {
+        border-top: 1px dashed #000;
+        padding-top: 4px;
+        margin-top: 4px;
+    }
+
+    .ticket-total-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        padding: 1px 0;
+    }
+
+    .ticket-total-row.grand-total {
+        font-size: 14px;
+        font-weight: bold;
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+        margin: 3px 0;
+        padding: 3px 0;
+    }
+
+    .ticket-footer {
+        text-align: center;
+        margin-top: 8px;
+        border-top: 1px dashed #000;
+        padding-top: 6px;
+        font-size: 10px;
+    }
+
+    .ticket-footer p {
+        margin: 2px 0;
+    }
+
+    .ticket-barcode-placeholder {
+        text-align: center;
+        margin: 6px 0;
+        font-size: 22px;
+        letter-spacing: 2px;
+    }
+}

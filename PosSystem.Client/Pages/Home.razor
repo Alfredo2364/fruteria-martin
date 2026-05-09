@@ -1,0 +1,57 @@
+@page "/"
+@using PosSystem.Client.Services
+@inject SyncService SyncService
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1>POS Dashboard</h1>
+
+Welcome to the modern Point of Sale System.
+
+<div class="mt-4">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">Cloud Synchronization</h5>
+            <p class="card-text">Sync your local offline database with the cloud SQL Server backend.</p>
+            <button class="btn btn-success" @onclick="RunSync" disabled="@isSyncing">
+                @if (isSyncing)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span> Syncing...</span>
+                }
+                else
+                {
+                    <span class="bi bi-cloud-sync"></span> <span>Sync Now</span>
+                }
+            </button>
+            @if (!string.IsNullOrEmpty(syncMessage))
+            {
+                <div class="alert alert-info mt-3">@syncMessage</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isSyncing = false;
+    private string syncMessage = "";
+
+    private async Task RunSync()
+    {
+        try
+        {
+            isSyncing = true;
+            syncMessage = "Synchronizing data with cloud server...";
+            await SyncService.SyncDataAsync();
+            syncMessage = "Sync completed successfully at " + DateTime.Now.ToString("T");
+        }
+        catch (Exception ex)
+        {
+            syncMessage = "Sync failed: " + ex.Message;
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+}

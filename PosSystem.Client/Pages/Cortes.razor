@@ -1,0 +1,320 @@
+@page "/cortes"
+@using PosSystem.Shared.Models
+@using PosSystem.Client.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LocalDbContext> DbFactory
+
+<PageTitle>Cortes de Caja - Frutería Martín</PageTitle>
+
+<h1 class="mb-4">✂️ Cortes de Caja</h1>
+
+<!-- Tab Navigation -->
+<ul class="nav nav-tabs mb-4" id="cortesTabs">
+    <li class="nav-item">
+        <button class="nav-link @(activeTab == "general" ? "active" : "")" @onclick='() => SetTab("general")'>
+            📊 Corte General
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(activeTab == "individual" ? "active" : "")" @onclick='() => SetTab("individual")'>
+            👤 Corte por Cajero
+        </button>
+    </li>
+</ul>
+
+<!-- Date Filter -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <label class="form-label fw-bold">📅 Fecha del Corte:</label>
+        <input type="date" class="form-control" @bind="selectedDate" @bind:after="LoadData" />
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-success" role="status"></div>
+        <p class="mt-2 text-muted">Calculando corte...</p>
+    </div>
+}
+else
+{
+    <!-- GENERAL TAB -->
+    @if (activeTab == "general")
+    {
+        <!-- Summary Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card text-white bg-success shadow">
+                    <div class="card-body text-center">
+                        <div style="font-size:2.5rem">💵</div>
+                        <h5 class="card-title">Total del Día</h5>
+                        <h2 class="fw-bold">@totalDelDia.ToString("C")</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-primary shadow">
+                    <div class="card-body text-center">
+                        <div style="font-size:2.5rem">🧾</div>
+                        <h5 class="card-title">Nº de Ventas</h5>
+                        <h2 class="fw-bold">@totalTransacciones</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-warning shadow">
+                    <div class="card-body text-center">
+                        <div style="font-size:2.5rem">👥</div>
+                        <h5 class="card-title">Cajeros Activos</h5>
+                        <h2 class="fw-bold">@cortePorEmpleado.Count</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Breakdown per Employee -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <strong>📋 Resumen por Cajero — @selectedDate.ToString("dd/MM/yyyy")</strong>
+            </div>
+            <div class="card-body p-0">
+                @if (!cortePorEmpleado.Any())
+                {
+                    <p class="text-muted text-center p-4">No hay ventas registradas para esta fecha.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Cajero</th>
+                                    <th>Rol</th>
+                                    <th class="text-center">Ventas</th>
+                                    <th class="text-end">Total</th>
+                                    <th class="text-center">% del Día</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in cortePorEmpleado.OrderByDescending(x => x.Total))
+                                {
+                                    var porcentaje = totalDelDia > 0 ? (item.Total / totalDelDia) * 100 : 0;
+                                    <tr>
+                                        <td class="fw-bold">@item.EmployeeName</td>
+                                        <td><span class="badge bg-secondary">@item.Role</span></td>
+                                        <td class="text-center">@item.NumVentas</td>
+                                        <td class="text-end fw-bold text-success">@item.Total.ToString("C")</td>
+                                        <td>
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar bg-success"
+                                                     style="width: @porcentaje.ToString("F0")%">
+                                                    @porcentaje.ToString("F0")%
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot class="table-dark">
+                                <tr>
+                                    <td colspan="2"><strong>TOTAL GENERAL</strong></td>
+                                    <td class="text-center"><strong>@totalTransacciones</strong></td>
+                                    <td class="text-end"><strong>@totalDelDia.ToString("C")</strong></td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- INDIVIDUAL TAB -->
+    @if (activeTab == "individual")
+    {
+        <div class="row mb-4">
+            <div class="col-md-5">
+                <label class="form-label fw-bold">👤 Selecciona el Cajero:</label>
+                <select class="form-select" @bind="selectedEmployeeId" @bind:after="LoadData">
+                    <option value="0">-- Todos los cajeros --</option>
+                    @if (employees != null)
+                    {
+                        @foreach (var emp in employees)
+                        {
+                            <option value="@emp.Id">@emp.Name</option>
+                        }
+                    }
+                </select>
+            </div>
+        </div>
+
+        @if (selectedEmployeeId > 0)
+        {
+            var empleado = employees?.FirstOrDefault(e => e.Id == selectedEmployeeId);
+            var corteEmp = cortePorEmpleado.FirstOrDefault(c => c.EmployeeId == selectedEmployeeId);
+
+            <!-- Employee Summary Card -->
+            <div class="card border-0 shadow mb-4" style="background: linear-gradient(135deg, #1a6f3c, #27ae60); color: white;">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <div style="font-size: 3.5rem;">👤</div>
+                        </div>
+                        <div class="col">
+                            <h4 class="mb-0 fw-bold">@(empleado?.Name ?? "Cajero")</h4>
+                            <span class="badge bg-light text-dark">@empleado?.Role</span>
+                            <p class="mb-0 mt-1 opacity-75">Corte del @selectedDate.ToString("dd/MM/yyyy")</p>
+                        </div>
+                        <div class="col-auto text-end">
+                            <small class="d-block opacity-75">Total a Entregar</small>
+                            <h2 class="fw-bold mb-0">@(corteEmp?.Total.ToString("C") ?? "$0.00")</h2>
+                            <small class="opacity-75">@(corteEmp?.NumVentas ?? 0) ventas realizadas</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transaction Detail -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <strong>🧾 Detalle de Transacciones</strong>
+                </div>
+                <div class="card-body p-0">
+                    @if (!ventasDelEmpleado.Any())
+                    {
+                        <p class="text-muted text-center p-4">Este cajero no tiene ventas en esta fecha.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Hora</th>
+                                        <th class="text-center">Productos</th>
+                                        <th class="text-end">Total</th>
+                                        <th class="text-center">Sincronizado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ var counter = 1; }
+                                    @foreach (var venta in ventasDelEmpleado.OrderByDescending(v => v.Date))
+                                    {
+                                        <tr>
+                                            <td><span class="badge bg-secondary">#@counter</span></td>
+                                            <td>@venta.Date.ToLocalTime().ToString("hh:mm tt")</td>
+                                            <td class="text-center">@(venta.SaleItems?.Count ?? 0) artículo(s)</td>
+                                            <td class="text-end fw-bold text-success">@venta.TotalAmount.ToString("C")</td>
+                                            <td class="text-center">
+                                                @if (venta.IsSynced)
+                                                {
+                                                    <span class="badge bg-success">✓ Sí</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                        counter++;
+                                    }
+                                </tbody>
+                                <tfoot class="table-success">
+                                    <tr>
+                                        <td colspan="3"><strong>Total del cajero</strong></td>
+                                        <td class="text-end fw-bold">@ventasDelEmpleado.Sum(v => v.TotalAmount).ToString("C")</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <span>ℹ️</span> Selecciona un cajero del menú para ver su corte individual detallado.
+            </div>
+        }
+    }
+}
+
+@code {
+    private string activeTab = "general";
+    private DateTime selectedDate = DateTime.Today;
+    private int selectedEmployeeId = 0;
+    private bool isLoading = true;
+
+    private List<Employee>? employees;
+    private List<Sale> ventasDelEmpleado = new();
+
+    // Summary model for general tab
+    private List<CorteCajero> cortePorEmpleado = new();
+    private decimal totalDelDia = 0;
+    private int totalTransacciones = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private void SetTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var db = await DbFactory.CreateDbContextAsync();
+
+        employees ??= await db.Employees.Where(e => e.IsActive).ToListAsync();
+
+        var startOfDay = selectedDate.Date.ToUniversalTime();
+        var endOfDay = startOfDay.AddDays(1);
+
+        // Load all sales for the day including items and employees
+        var salesOfDay = await db.Sales
+            .Include(s => s.Employee)
+            .Include(s => s.SaleItems)
+            .Where(s => s.Date >= startOfDay && s.Date < endOfDay)
+            .ToListAsync();
+
+        // General tab data
+        cortePorEmpleado = salesOfDay
+            .GroupBy(s => new { s.EmployeeId, s.Employee!.Name, s.Employee.Role })
+            .Select(g => new CorteCajero
+            {
+                EmployeeId = g.Key.EmployeeId,
+                EmployeeName = g.Key.Name,
+                Role = g.Key.Role,
+                NumVentas = g.Count(),
+                Total = g.Sum(s => s.TotalAmount)
+            })
+            .ToList();
+
+        totalDelDia = cortePorEmpleado.Sum(c => c.Total);
+        totalTransacciones = salesOfDay.Count;
+
+        // Individual tab data
+        ventasDelEmpleado = selectedEmployeeId > 0
+            ? salesOfDay.Where(s => s.EmployeeId == selectedEmployeeId).ToList()
+            : new();
+
+        isLoading = false;
+    }
+
+    private class CorteCajero
+    {
+        public int EmployeeId { get; set; }
+        public string EmployeeName { get; set; } = "";
+        public string Role { get; set; } = "";
+        public int NumVentas { get; set; }
+        public decimal Total { get; set; }
+    }
+}

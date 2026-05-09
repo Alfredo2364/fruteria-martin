@@ -1,0 +1,284 @@
+@page "/sales"
+@using PosSystem.Shared.Models
+@using PosSystem.Client.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LocalDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Ventas - Frutería Martín</PageTitle>
+
+<h1 class="mb-4">💰 Terminal de Ventas</h1>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <strong>🧾 Cajero Activo</strong>
+            </div>
+            <div class="card-body pb-2">
+                <select class="form-select" @bind="selectedEmployeeId">
+                    <option value="0" disabled>-- Selecciona tu nombre --</option>
+                    @if (employees != null)
+                    {
+                        @foreach (var emp in employees)
+                        {
+                            <option value="@emp.Id">@emp.Name (@emp.Role)</option>
+                        }
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-3">
+            <div class="card-header bg-primary text-white">
+                <strong>🛒 Catálogo de Productos</strong>
+            </div>
+            <div class="card-body">
+                @if (products == null)
+                {
+                    <p><em>Cargando productos...</em></p>
+                }
+                else if (!products.Any())
+                {
+                    <p class="text-muted">No hay productos disponibles. Agrega productos en Inventario.</p>
+                }
+                else
+                {
+                    <div class="row g-2">
+                        @foreach (var product in products)
+                        {
+                            <div class="col-6 col-md-4">
+                                <div class="card h-100 border-2" style="cursor: pointer; transition: all .15s"
+                                     @onclick="() => AddToCart(product)">
+                                    <div class="card-body text-center p-2">
+                                        <div style="font-size:2rem">🍎</div>
+                                        <h6 class="card-title mb-1">@product.Name</h6>
+                                        <span class="badge bg-success fs-6">@product.Price.ToString("C")</span>
+                                        <div><small class="text-muted">Stock: @product.StockQuantity</small></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm sticky-top" style="top: 1rem">
+            <div class="card-header bg-dark text-white">
+                <strong>🧮 Venta Actual</strong>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    @if (!cart.Any())
+                    {
+                        <li class="list-group-item text-muted text-center py-4">
+                            Toca un producto para agregarlo
+                        </li>
+                    }
+                    @foreach (var item in cart)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="fw-bold">@item.Product?.Name</span><br/>
+                                <small class="text-muted">@item.Quantity x @item.UnitPrice.ToString("C")</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold text-success">@item.SubTotal.ToString("C")</span>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveFromCart(item)">✕</button>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </div>
+            <div class="card-footer">
+                <div class="d-flex justify-content-between fs-5 fw-bold mb-2">
+                    <span>Total:</span>
+                    <span class="text-success">@Total.ToString("C")</span>
+                </div>
+                @if (saleSuccess)
+                {
+                    <div class="alert alert-success py-1 px-2 mb-2 text-center">✅ Venta registrada</div>
+                    <button class="btn btn-outline-secondary w-100 mb-2" @onclick="PrintTicket">
+                        🖨️ Imprimir Ticket
+                    </button>
+                }
+                @if (errorMessage != null)
+                {
+                    <div class="alert alert-danger py-1 px-2 mb-2">@errorMessage</div>
+                }
+                <button class="btn btn-success w-100 py-2 fw-bold"
+                        @onclick="CompleteSale"
+                        disabled="@(!cart.Any() || selectedEmployeeId == 0)">
+                    ✅ Completar Venta
+                </button>
+                @if (selectedEmployeeId == 0)
+                {
+                    <small class="text-warning d-block text-center mt-1">⚠ Selecciona un cajero primero</small>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ==========================================
+     TICKET TÉRMICO (Invisible en pantalla,
+     solo visible al imprimir por CSS @media print)
+     ========================================== -->
+<div class="thermal-ticket-wrapper">
+    <div class="ticket">
+        <!-- HEADER -->
+        <div class="ticket-header">
+            <h2>Frutería Martín</h2>
+            <p>Su tienda de confianza</p>
+            <p>Tel: (555) 123-4567</p>
+        </div>
+
+        <!-- TICKET INFO -->
+        <div class="ticket-info">
+            <p><strong>Ticket #:</strong> @lastSaleId</p>
+            <p><strong>Fecha:</strong> @ticketDate.ToString("dd/MM/yyyy HH:mm")</p>
+            <p><strong>Cajero:</strong> @ticketEmployeeName</p>
+        </div>
+
+        <!-- ITEMS HEADER -->
+        <div class="ticket-items-header">
+            <span style="flex:2">Descripción</span>
+            <span style="flex:1; text-align:center">Cant.</span>
+            <span style="flex:1; text-align:right">Total</span>
+        </div>
+
+        <!-- ITEMS -->
+        @foreach (var item in ticketItems)
+        {
+            <div class="ticket-item">
+                <div class="ticket-item-name">@item.Product?.Name</div>
+                <div class="ticket-item-detail">
+                    <span>@item.UnitPrice.ToString("C") c/u</span>
+                    <span>x@item.Quantity</span>
+                    <span>@item.SubTotal.ToString("C")</span>
+                </div>
+            </div>
+        }
+
+        <!-- TOTALS -->
+        <div class="ticket-totals">
+            <div class="ticket-total-row">
+                <span>Subtotal:</span>
+                <span>@ticketTotal.ToString("C")</span>
+            </div>
+            <div class="ticket-total-row">
+                <span>IVA (0%):</span>
+                <span>$0.00</span>
+            </div>
+            <div class="ticket-total-row grand-total">
+                <span>TOTAL:</span>
+                <span>@ticketTotal.ToString("C")</span>
+            </div>
+        </div>
+
+        <!-- BARCODE PLACEHOLDER -->
+        <div class="ticket-barcode-placeholder">
+            ||||| ||| || ||||| ||
+        </div>
+
+        <!-- FOOTER -->
+        <div class="ticket-footer">
+            <p>¡Gracias por su compra!</p>
+            <p>Vuelva pronto 🍎</p>
+            <p style="margin-top: 4px; font-size: 9px;">Conserve su ticket</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Product>? products;
+    private List<Employee>? employees;
+    private List<SaleItem> cart = new();
+    private int selectedEmployeeId = 0;
+    private bool saleSuccess = false;
+    private string? errorMessage;
+
+    private decimal Total => cart.Sum(i => i.SubTotal);
+
+    // Ticket data (populated after sale is completed)
+    private int lastSaleId = 0;
+    private DateTime ticketDate = DateTime.Now;
+    private string ticketEmployeeName = "";
+    private decimal ticketTotal = 0;
+    private List<SaleItem> ticketItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        products = await db.Products.ToListAsync();
+        employees = await db.Employees.Where(e => e.IsActive).ToListAsync();
+    }
+
+    private void AddToCart(Product product)
+    {
+        var existing = cart.FirstOrDefault(i => i.ProductId == product.Id);
+        if (existing != null)
+            existing.Quantity++;
+        else
+            cart.Add(new SaleItem
+            {
+                ProductId = product.Id,
+                Product = product,
+                Quantity = 1,
+                UnitPrice = product.Price
+            });
+    }
+
+    private void RemoveFromCart(SaleItem item)
+    {
+        cart.Remove(item);
+    }
+
+    private async Task CompleteSale()
+    {
+        saleSuccess = false;
+        errorMessage = null;
+
+        if (selectedEmployeeId == 0)
+        {
+            errorMessage = "Selecciona un cajero antes de completar la venta.";
+            return;
+        }
+
+        using var db = await DbFactory.CreateDbContextAsync();
+        var sale = new Sale
+        {
+            Date = DateTime.UtcNow,
+            TotalAmount = Total,
+            EmployeeId = selectedEmployeeId,
+            IsSynced = false,
+            SaleItems = cart.Select(c => new SaleItem
+            {
+                ProductId = c.ProductId,
+                Quantity = c.Quantity,
+                UnitPrice = c.UnitPrice
+            }).ToList()
+        };
+
+        db.Sales.Add(sale);
+        await db.SaveChangesAsync();
+
+        // Populate ticket data before clearing the cart
+        lastSaleId = sale.Id;
+        ticketDate = sale.Date.ToLocalTime();
+        ticketTotal = Total;
+        ticketEmployeeName = employees?.FirstOrDefault(e => e.Id == selectedEmployeeId)?.Name ?? "Cajero";
+        ticketItems = cart.ToList(); // snapshot for printing
+
+        cart.Clear();
+        saleSuccess = true;
+    }
+
+    private async Task PrintTicket()
+    {
+        await JS.InvokeVoidAsync("printTicket");
+    }
+}

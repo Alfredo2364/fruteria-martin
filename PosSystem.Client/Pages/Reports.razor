@@ -1,0 +1,87 @@
+@page "/reports"
+@using PosSystem.Shared.Models
+@using PosSystem.Client.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LocalDbContext> DbFactory
+
+<PageTitle>Reports</PageTitle>
+
+<h1>Sales Reports</h1>
+
+@if (sales == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Revenue</h5>
+                    <h3>@sales.Sum(s => s.TotalAmount).ToString("C")</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Transactions</h5>
+                    <h3>@sales.Count</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Sync</h5>
+                    <h3>@sales.Count(s => !s.IsSynced)</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h3 class="mt-4">Recent Transactions</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Items Count</th>
+                <th>Total</th>
+                <th>Synced</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var sale in sales.OrderByDescending(s => s.Date).Take(20))
+            {
+                <tr>
+                    <td>@sale.Date.ToLocalTime()</td>
+                    <td>@sale.SaleItems?.Count</td>
+                    <td>@sale.TotalAmount.ToString("C")</td>
+                    <td>
+                        @if (sale.IsSynced)
+                        {
+                            <span class="badge bg-success">Yes</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">No</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Sale>? sales;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        sales = await db.Sales
+            .Include(s => s.SaleItems)
+            .ToListAsync();
+    }
+}

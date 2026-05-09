@@ -1,0 +1,81 @@
+@page "/inventory"
+@using PosSystem.Shared.Models
+@using PosSystem.Client.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LocalDbContext> DbFactory
+
+<PageTitle>Inventory</PageTitle>
+
+<h1>Inventory Management</h1>
+
+<button class="btn btn-primary mb-3" @onclick="AddNewProduct">Add Sample Product</button>
+
+@if (products == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>SKU</th>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Stock</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in products)
+            {
+                <tr>
+                    <td>@p.Sku</td>
+                    <td>@p.Name</td>
+                    <td>@p.Price.ToString("C")</td>
+                    <td>@p.StockQuantity</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteProduct(p)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Product>? products;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        products = await db.Products.ToListAsync();
+    }
+
+    private async Task AddNewProduct()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        db.Products.Add(new Product
+        {
+            Name = "Sample Product " + DateTime.Now.Ticks.ToString().Substring(0, 4),
+            Sku = "SKU" + DateTime.Now.Ticks.ToString().Substring(0, 6),
+            Price = 19.99m,
+            StockQuantity = 100
+        });
+        await db.SaveChangesAsync();
+        await LoadData();
+    }
+
+    private async Task DeleteProduct(Product product)
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        db.Products.Remove(product);
+        await db.SaveChangesAsync();
+        await LoadData();
+    }
+}
