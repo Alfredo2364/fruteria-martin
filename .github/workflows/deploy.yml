@@ -80,6 +80,19 @@ jobs:
       - name: ✅ Asegurar .nojekyll
         run: touch release/wwwroot/.nojekyll
 
+      # Reemplazar el service worker con una versión mínima.
+      # El SW generado por Blazor tiene hashes SRI para "/" pero se sirve
+      # desde "/fruteria-martin/", causando errores de integridad.
+      - name: 🔧 Reemplazar Service Worker con versión limpia
+        run: |
+          cat > release/wwwroot/service-worker.js << 'EOF'
+          // Service Worker deshabilitado para GitHub Pages
+          self.addEventListener('install', e => self.skipWaiting());
+          self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+          self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+          EOF
+          echo "✅ Service Worker reemplazado"
+
       - name: 📤 Subir artefacto a GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
